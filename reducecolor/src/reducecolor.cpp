@@ -16,14 +16,21 @@ unsigned Error(const Mat & hist, const vector<unsigned> & g)
     return e;
 }
 
-void ScanImageAndReduceRound(const Mat& src, Mat& dst, int n)
+unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'erreur
 {
     // accept only char type matrices
     src.copyTo(dst);
 
+    unsigned e = 0;
+
     MatIterator_<uchar> it, end;
     for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
-        *it = int( int(*it/(256.0/n)) * (256.0/n) );
+    {
+        uchar tmp = int( int(*it/(256.0/n)) * (256.0/n) );
+        e += abs(tmp - *it);
+        *it = tmp;
+    }
+    return e;
 }
 
 void ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
@@ -38,11 +45,8 @@ void ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSiz
         *it = int( int(*it/(256.0/3)) * (256.0/3) );
 }
 
-void ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const int * histSize, const float ** ranges)
+unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat & hist)
 {
-    Mat hist;
-    calcHist(&src, 1, 0, Mat(), hist, 1, histSize, ranges);
-
     vector< vector<unsigned> > E(256, vector<unsigned>(n)); // Error
     vector< vector< vector<unsigned> > > G(256, vector< vector<unsigned> >(n)); // vector generating this error
 
@@ -75,89 +79,6 @@ void ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const int * his
         }
         else
         {
-            cerr << "EGALITE !!!! [" << i << "][" << 0 << "]" << endl;
-            E[i][0] = eprec;
-            G[i][0] = gprec;
-        }
-    }
-
-    for (unsigned i = 1; i < 256; i++)
-        for (unsigned j = 1; j < n; j++)
-        {
-            vector<unsigned> ggauche = G[i-1][j];
-            ggauche.push_back(ggauche.at(i-1));
-            vector<unsigned> ghaut = G[i][j-1];
-            for (unsigned m = (ghaut.at(i-1) + i) / 2; m < ghaut.size(); m++)
-                ghaut[m] = i;
-            ghaut.push_back(i);
-
-            unsigned egauche = Error(hist, ggauche);
-            unsigned ehaut = Error(hist, ghaut);
-
-            if (egauche < ehaut)
-            {
-                E[i][j] = egauche;
-                G[i][j] = ggauche;
-            }
-            else if (egauche > ehaut)
-            {
-                E[i][j] = ehaut;
-                G[i][j] = ghaut;
-                cerr << "Descente !!!! [" << i << "][" << j << "]" << endl;
-            }
-            else
-            {
-                // cerr << "EGALITE !!!! [" << i << "][" << j << "]" << endl;
-                E[i][j] = egauche;
-                G[i][j] = ggauche;
-            }
-        }
-
-    src.copyTo(dst);
-    MatIterator_<uchar> it, end;
-    for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
-        *it = G[255][n-1].at(*it);
-    cerr << "Erreur finale " << E[255][n-1] << endl; // 3268512
-}
-
-void ScanImageAndReduceDyn2(const Mat& src, Mat& dst, unsigned n, const int * histSize, const float ** ranges)
-{
-    Mat hist;
-    calcHist(&src, 1, 0, Mat(), hist, 1, histSize, ranges);
-
-    vector< vector<unsigned> > E(256, vector<unsigned>(n)); // Error
-    vector< vector< vector<unsigned> > > G(256, vector< vector<unsigned> >(n)); // vector generating this error
-
-    // première colonne
-    for (unsigned j = 0; j < n; j++)
-    {
-        E[0][j] = 0;
-        G[0][j].push_back(0);
-    }
-
-    // première ligne
-    for (unsigned i = 1; i < 256; i++)
-    {
-        vector<unsigned> gprec = G[i-1][0];
-        gprec.push_back(gprec[i-1]);
-        vector<unsigned> gsuiv (i+1, i);
-
-        unsigned eprec = Error(hist, gprec);
-        unsigned esuiv = Error(hist, gsuiv);
-
-        if (eprec < esuiv)
-        {
-            E[i][0] = eprec;
-            G[i][0] = gprec;
-        }
-        else if (eprec > esuiv)
-        {
-            E[i][0] = esuiv;
-            G[i][0] = gsuiv;
-        }
-        else
-        {
-            cerr << "EGALITE !!!! [" << i << "][" << 0 << "]" << endl;
             E[i][0] = eprec;
             G[i][0] = gprec;
         }
@@ -192,21 +113,26 @@ void ScanImageAndReduceDyn2(const Mat& src, Mat& dst, unsigned n, const int * hi
             {
                 E[i][j] = ehaut;
                 G[i][j] = ghaut;
-                cerr << "Descente !!!! [" << i << "][" << j << "]" << endl;
             }
             else
             {
-                // cerr << "EGALITE !!!! [" << i << "][" << j << "]" << endl;
                 E[i][j] = egauche;
                 G[i][j] = ggauche;
             }
         }
 
         src.copyTo(dst);
+
+        unsigned e = 0;
+
         MatIterator_<uchar> it, end;
         for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
-            *it = G[255][n-1].at(*it);
-        cerr << "Erreur finale " << E[255][n-1] << endl; // 3268512
+        {
+            uchar tmp = G[255][n-1].at(*it);
+            e += abs(tmp - *it);
+            *it = tmp;
+        }
+        return Error(hist,G[255][n-1]);
 }
 
 int main(int argc, const char** argv)
@@ -252,23 +178,23 @@ int main(int argc, const char** argv)
         vector<Mat> bgr_dyn(3);
         split( image, bgr_planes );
 
-        ScanImageAndReduceRound (bgr_planes[0], bgr_round[0], n);
-        ScanImageAndReduceRound (bgr_planes[1], bgr_round[1], n);
-        ScanImageAndReduceRound (bgr_planes[2], bgr_round[2], n);
-
-        ScanImageAndReduceDyn (bgr_planes[0], bgr_dyn[0], n, &histSize, histRange);
-        ScanImageAndReduceDyn (bgr_planes[1], bgr_dyn[1], n, &histSize, histRange);
-        ScanImageAndReduceDyn (bgr_planes[2], bgr_dyn[2], n, &histSize, histRange);
-
-        merge(bgr_dyn, imageDyn);
-        merge(bgr_round, imageRound);
-
         Mat b_hist, g_hist, r_hist;
 
         /// Compute the histograms:
         calcHist(&bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, histRange);
         calcHist(&bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, histRange);
         calcHist(&bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, histRange);
+
+        ScanImageAndReduceRound (bgr_planes[0], bgr_round[0], n);
+        ScanImageAndReduceRound (bgr_planes[1], bgr_round[1], n);
+        ScanImageAndReduceRound (bgr_planes[2], bgr_round[2], n);
+
+        ScanImageAndReduceDyn (bgr_planes[0], bgr_dyn[0], n, b_hist);
+        ScanImageAndReduceDyn (bgr_planes[1], bgr_dyn[1], n, g_hist);
+        ScanImageAndReduceDyn (bgr_planes[2], bgr_dyn[2], n, r_hist);
+
+        merge(bgr_dyn, imageDyn);
+        merge(bgr_round, imageRound);
 
         int hist_w = 512;
         int hist_h = 400;
@@ -300,11 +226,10 @@ int main(int argc, const char** argv)
     else
     {
         Mat hist;
-
         calcHist(&image, 1, 0, Mat(), hist, 1, &histSize, histRange);
 
-        ScanImageAndReduceRound (image, imageRound, n);
-        ScanImageAndReduceDyn2 (image, imageDyn, n, &histSize, histRange);
+        cerr << "Erreur Round : " << ScanImageAndReduceRound (image, imageRound, n) << endl;
+        cerr << "Erreur Dynam : " << ScanImageAndReduceDyn (image, imageDyn, n, hist) << endl;
 
         int hist_w = 512;
         int hist_h = 400;
