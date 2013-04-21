@@ -12,7 +12,18 @@ unsigned Error(const Mat & hist, const vector<unsigned> & g)
 {
     unsigned e = 0;
     for(unsigned i = 0; i < g.size(); i++)
-        e += cvRound(hist.at<float>(i)) * abs(g[i] - i);
+        e += cvRound(hist.at<float>(i)) * labs(g[i] - i);
+    return e;
+}
+
+unsigned Error2(const Mat & image, const vector<unsigned> & g)
+{
+    unsigned e = 0;
+    MatConstIterator_<uchar> it, end;
+    for (it = image.begin<uchar>(), end = image.end<uchar>(); it != end; ++it)
+    {
+        e += labs(g[*it] - *it);
+    }
     return e;
 }
 
@@ -22,14 +33,15 @@ unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'e
     src.copyTo(dst);
 
     unsigned e = 0;
-
-    MatIterator_<uchar> it, end;
-    for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
-    {
-        uchar tmp = int( int(*it/(256.0/n)) * (256.0/n) );
-        e += abs(tmp - *it);
-        *it = tmp;
-    }
+    for( int i = 0; i < dst.rows; ++i)
+        for( int j = 0; j < dst.cols; ++j )
+        {
+            unsigned HO = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
+            uchar he = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
+            cerr << endl;
+            e += labs(int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) ) - dst.at<uchar>(i,j));
+            dst.at<uchar>(i,j) = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
+        }
     return e;
 }
 
@@ -124,15 +136,13 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
         src.copyTo(dst);
 
         unsigned e = 0;
-
-        MatIterator_<uchar> it, end;
-        for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
-        {
-            uchar tmp = G[255][n-1].at(*it);
-            e += abs(tmp - *it);
-            *it = tmp;
-        }
-        return Error(hist,G[255][n-1]);
+        for( int i = 0; i < dst.rows; ++i)
+            for( int j = 0; j < dst.cols; ++j )
+            {
+                e += labs(G[255][n-1][dst.at<uchar>(i,j)] - dst.at<uchar>(i,j));
+                dst.at<uchar>(i,j) = G[255][n-1][dst.at<uchar>(i,j)];
+            }
+        return e;
 }
 
 int main(int argc, const char** argv)
@@ -227,6 +237,16 @@ int main(int argc, const char** argv)
     {
         Mat hist;
         calcHist(&image, 1, 0, Mat(), hist, 1, &histSize, histRange);
+
+        unsigned nb200 = 0;
+        MatIterator_<uchar> it, end;
+        for (it = image.begin<uchar>(), end = image.end<uchar>(); it != end; ++it)
+        {
+            if(*it == 200)
+                nb200++;
+        }
+        cerr << nb200 << " / " << cvRound(hist.at<float>(200)) << endl;
+
 
         cerr << "Erreur Round : " << ScanImageAndReduceRound (image, imageRound, n) << endl;
         cerr << "Erreur Dynam : " << ScanImageAndReduceDyn (image, imageDyn, n, hist) << endl;
