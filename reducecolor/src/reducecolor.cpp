@@ -26,6 +26,18 @@ void ScanImageAndReduceRound(const Mat& src, Mat& dst, int n)
         *it = int( int(*it/(256.0/n)) * (256.0/n) );
 }
 
+void ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
+{
+    Mat hist;
+    calcHist(&src, 1, 0, Mat(), hist, 1, histSize, ranges);
+
+    src.copyTo(dst);
+
+    MatIterator_<uchar> it, end;
+    for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
+        *it = int( int(*it/(256.0/3)) * (256.0/3) );
+}
+
 void ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const int * histSize, const float ** ranges)
 {
     Mat hist;
@@ -91,10 +103,11 @@ void ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const int * his
             {
                 E[i][j] = ehaut;
                 G[i][j] = ghaut;
+                cerr << "Descente !!!! [" << i << "][" << j << "]" << endl;
             }
             else
             {
-                cerr << "EGALITE !!!! [" << i << "][" << j << "]" << endl;
+                // cerr << "EGALITE !!!! [" << i << "][" << j << "]" << endl;
                 E[i][j] = egauche;
                 G[i][j] = ggauche;
             }
@@ -105,6 +118,11 @@ void ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const int * his
     for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
         *it = G[255][n-1].at(*it);
     cerr << "Erreur finale " << E[255][n-1] << endl; // 3268512
+}
+
+void ScanImageAndReduceDyn2(const Mat& src, Mat& dst, unsigned n, const int * histSize, const float ** ranges)
+{
+
 }
 
 int main(int argc, const char** argv)
