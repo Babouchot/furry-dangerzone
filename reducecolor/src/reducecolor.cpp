@@ -58,16 +58,52 @@ unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'e
             return e;
 }
 
-void ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
+unsigned ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
 {
     Mat hist;
     calcHist(&src, 1, 0, Mat(), hist, 1, histSize, ranges);
 
+    vector<unsigned> gbest;
+    unsigned error_min = numeric_limits<unsigned>::max();
+    unsigned m1,m2,m3;
+
+    for (m1 = 0; m1 < 256; ++m1) {
+        cout << m1 << endl;
+        for (m2 = 0; m2 < 256; ++m2) {
+            for (m3 = 0; m3 < 256; ++m3) {
+                vector<unsigned> g;
+                for (unsigned i = 0; i < 256; ++i) {
+                    if (i < (m1+m2)/2)
+                        g.push_back(m1);
+                    else if (i < (m2+m3)/2)
+                        g.push_back(m2);
+                    else
+                        g.push_back(m3);
+                }
+                unsigned error = Error(hist, g);
+                //cout << "error : " << error << "; error_min : " << error_min << endl;
+                if (error < error_min) {
+                    error_min = error;
+                    gbest = g;
+                }
+            }
+        }
+    }
+
+
     src.copyTo(dst);
 
-    MatIterator_<uchar> it, end;
-    for (it = dst.begin<uchar>(), end = dst.end<uchar>(); it != end; ++it)
-        *it = int( int(*it/(256.0/3)) * (256.0/3) );
+    for( int i = 0; i < dst.rows; ++i)
+        for( int j = 0; j < dst.cols; ++j )
+            dst.at<uchar>(i,j) = gbest.at(dst.at<uchar>(i,j));
+
+    for (int i = 0; i < gbest.size(); ++i) {
+        cout << "g[" << i << "] = " << gbest[i] << "; ";
+    }
+
+    cout << endl;
+
+    return error_min;
 }
 
 unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat & hist)
@@ -160,7 +196,7 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
 
 int main(int argc, const char** argv)
 {
-    Mat image, imageRound, imageDyn;
+    Mat image, imageRound, imageDyn, bruteForceBest;
     int n = 3;
     int histSize = 256;
     float range[] = { 0, 256 } ;
@@ -253,6 +289,7 @@ int main(int argc, const char** argv)
 
         cerr << "Erreur Round : " << ScanImageAndReduceRound (image, imageRound, n) << endl;
         cerr << "Erreur Dynam : " << ScanImageAndReduceDyn (image, imageDyn, n, hist) << endl;
+        cerr << "Erreur BruteForce : " << ScanImageAndReduce3BruteForce(image, bruteForceBest, &histSize, histRange) << endl;
 
         int hist_w = 512;
         int hist_h = 400;
@@ -278,6 +315,7 @@ int main(int argc, const char** argv)
     imshow("Origin", image);              // Show our image inside it.
     imshow("Round", imageRound);
     imshow("Dynamic", imageDyn);
+    imshow("3BruteForce", bruteForceBest);
 
     waitKey(0);                            // Wait for a keystroke in the window
     return EXIT_SUCCESS;
