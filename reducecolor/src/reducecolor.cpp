@@ -6,7 +6,7 @@
 using namespace cv;
 using namespace std;
 
-#define COLOR false
+#define COLOR true
 
 unsigned Error(const Mat & hist, const vector<unsigned> & g)
 {
@@ -19,65 +19,36 @@ unsigned Error(const Mat & hist, const vector<unsigned> & g)
     return e;
 }
 
-unsigned Error2(const Mat & image, const vector<unsigned> & g)
-{
-    unsigned e = 0;
-    MatConstIterator_<uchar> it, end;
-    for (it = image.begin<uchar>(), end = image.end<uchar>(); it != end; ++it)
-    {
-        int tmp = g[*it] - (unsigned)*it;
-        e += labs(tmp);
-    }
-    return e;
-}
-
 unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'erreur
 {
-    /*
-    // accept only char type matrices
     src.copyTo(dst);
 
     unsigned e = 0;
     for( int i = 0; i < dst.rows; ++i)
         for( int j = 0; j < dst.cols; ++j )
         {
-            int rounded = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
-            e += labs(rounded - dst.at<uchar>(i,j));
-            dst.at<uchar>(i,j) = rounded;
-        }
-    */
-    vector<unsigned> g;
-    for(unsigned i = 0; i < 256; i++)
-        g.push_back(unsigned( unsigned(i/(256.0/n)) * (256.0/n) ));
-
-    src.copyTo(dst);
-
-    cout << Error2(src, g) << endl;
-
-    unsigned e = 0;
-    for( int i = 0; i < dst.rows; ++i)
-        for( int j = 0; j < dst.cols; ++j )
-        {
-            int tmp = g[dst.at<uchar>(i,j)] - dst.at<uchar>(i,j);
+            int tmp = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) ) - dst.at<uchar>(i,j);
             e += labs(tmp);
-            dst.at<uchar>(i,j) = g[dst.at<uchar>(i,j)];
+            dst.at<uchar>(i,j) = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
         }
     return e;
 }
 
-unsigned long long ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
+unsigned ScanImageAndReduceBruteForce(const Mat& src, Mat& dst, const Mat & hist)
 {
-    Mat hist;
-    calcHist(&src, 1, 0, Mat(), hist, 1, histSize, ranges);
-
     vector<unsigned> gbest;
-    unsigned error_min = numeric_limits<unsigned long long>::max();
-    unsigned m1,m2,m3;
+    unsigned error_min = numeric_limits<unsigned>::max();
+    unsigned progress = 0;
 
-    for (m1 = 0; m1 < 256; ++m1) {
-        cout << (m1*100)/256 << "%" << endl;
-        for (m2 = 0; m2 < 256; ++m2) {
-            for (m3 = 0; m3 < 256; ++m3) {
+    cout << "0%" << endl;
+    for (unsigned m1 = 0; m1 < 256; ++m1) {
+        if (int(m1 * 100 / 256.0) > progress)
+        {
+            progress = int(m1 * 100 / 256.0);
+            cout << progress << "%" << endl;
+        }
+        for (unsigned m2 = 0; m2 < 256; ++m2) {
+            for (unsigned m3 = 0; m3 < 256; ++m3) {
                 vector<unsigned> g;
                 for (unsigned i = 0; i < 256; ++i) {
                     if (i < (m1+m2)/2)
@@ -88,7 +59,6 @@ unsigned long long ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const
                         g.push_back(m3);
                 }
                 unsigned error = Error(hist, g);
-                //cout << "error : " << error << "; error_min : " << error_min << endl;
                 if (error < error_min) {
                     error_min = error;
                     gbest = g;
@@ -96,6 +66,7 @@ unsigned long long ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const
             }
         }
     }
+
     cout << "100%" << endl;
 
     src.copyTo(dst);
@@ -104,16 +75,10 @@ unsigned long long ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const
         for( int j = 0; j < dst.cols; ++j )
             dst.at<uchar>(i,j) = gbest.at(dst.at<uchar>(i,j));
 
-    /*for (int i = 0; i < gbest.size(); ++i) {
-        cout << "g[" << i << "] = " << gbest[i] << "; ";
-    }*/
-
-    cout << endl;
-
     return error_min;
 }
 
-unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat & hist)
+unsigned ScanImageAndReduceDyn (const Mat& src, Mat& dst, unsigned n, const Mat & hist)
 {
     vector< vector<unsigned> > E(256, vector<unsigned>(n)); // Error
     vector< vector< vector<unsigned> > > G(256, vector< vector<unsigned> >(n)); // vector generating this error
@@ -132,23 +97,19 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
         gprec.push_back(gprec[i-1]);
         vector<unsigned> gsuiv (i+1, i);
 
-        unsigned eprec = Error(hist, gprec);
+        int tmp = gprec[i] - i;
+        unsigned eprec = E[i-1][0] + cvRound(hist.at<float>(i)) * labs(tmp);
         unsigned esuiv = Error(hist, gsuiv);
 
-        if (eprec < esuiv)
+        if (eprec <= esuiv)
         {
             E[i][0] = eprec;
             G[i][0] = gprec;
-        }
-        else if (eprec > esuiv)
-        {
-            E[i][0] = esuiv;
-            G[i][0] = gsuiv;
         }
         else
         {
-            E[i][0] = eprec;
-            G[i][0] = gprec;
+            E[i][0] = esuiv;
+            G[i][0] = gsuiv;
         }
     }
 
@@ -157,35 +118,24 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
         {
             vector<unsigned> ggauche = G[i-1][j];
             ggauche.push_back(ggauche.at(i-1));
+            vector<unsigned> ghaut = G[i][j-1];
+            for (unsigned m = (ghaut.at(i-1) + i) / 2; m < ghaut.size(); m++)
+                ghaut[m] = i;
+            ghaut.push_back(i);
 
-            unsigned egauche = Error(hist,ggauche);
+            int tmp = ggauche[i] - i;
+            unsigned egauche = E[i-1][j] + cvRound(hist.at<float>(i)) * labs(tmp);
+            unsigned ehaut = Error(hist, ghaut);
 
-            vector<unsigned> ghaut = G[i-1][j-1];
-            unsigned ehaut;
-            if(ghaut.at(i-1) > i-1)
-            {
-                ehaut = egauche + 1;
-            }
-            else
-            {
-                ghaut.push_back(i + (i-1 - ghaut.at(i-1)));
-                ehaut = Error(hist, ghaut);
-            }
-
-            if (egauche < ehaut)
+            if (egauche <= ehaut)
             {
                 E[i][j] = egauche;
                 G[i][j] = ggauche;
             }
-            else if (egauche > ehaut)
+            else
             {
                 E[i][j] = ehaut;
                 G[i][j] = ghaut;
-            }
-            else
-            {
-                E[i][j] = egauche;
-                G[i][j] = ggauche;
             }
         }
 
@@ -199,18 +149,13 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
                 e += labs(tmp);
                 dst.at<uchar>(i,j) = G[255][n-1][dst.at<uchar>(i,j)];
             }
-
-        cerr << G[255][n-1][0];
-        for(unsigned i = 1; i < G[255][n-1].size(); i++)
-            cerr << "," << G[255][n-1][i];
-        cerr << endl;
         return e;
 }
 
 int main(int argc, const char** argv)
 {
     Mat image, imageRound, imageDyn, bruteForceBest;
-    int n = 3;
+    int n = 4;
     int histSize = 256;
     float range[] = { 0, 256 } ;
     const float* histRange[] = { range };
@@ -220,7 +165,6 @@ int main(int argc, const char** argv)
         cerr << " Usage: reducecolor image" << endl;
         return EXIT_FAILURE;
     }
-
 
     if (COLOR)
     {
@@ -237,7 +181,7 @@ int main(int argc, const char** argv)
         return -1;
     }
 
-    /// Display
+    // Display
     namedWindow("calcHist");
     namedWindow("Origin");
     namedWindow("Round");
@@ -252,7 +196,7 @@ int main(int argc, const char** argv)
 
         Mat b_hist, g_hist, r_hist;
 
-        /// Compute the histograms:
+        // Compute the histograms:
         calcHist(&bgr_planes[0], 1, 0, Mat(), b_hist, 1, &histSize, histRange);
         calcHist(&bgr_planes[1], 1, 0, Mat(), g_hist, 1, &histSize, histRange);
         calcHist(&bgr_planes[2], 1, 0, Mat(), r_hist, 1, &histSize, histRange);
@@ -274,12 +218,12 @@ int main(int argc, const char** argv)
 
         Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
 
-        /// Normalize the result to [ 0, histImage.rows ]
+        // Normalize the result to [ 0, histImage.rows ]
         normalize(b_hist, b_hist, 0, histImage.rows, NORM_MINMAX);
         normalize(g_hist, g_hist, 0, histImage.rows, NORM_MINMAX);
         normalize(r_hist, r_hist, 0, histImage.rows, NORM_MINMAX);
 
-        /// Draw for each channel
+        // Draw for each channel
         for( int i = 1; i < histSize; i++ )
         {
           line( histImage, Point( bin_w*(i-1), hist_h - cvRound(b_hist.at<float>(i-1)) ) ,
@@ -302,7 +246,7 @@ int main(int argc, const char** argv)
 
         cerr << "Erreur Round : " << ScanImageAndReduceRound (image, imageRound, n) << endl;
         cerr << "Erreur Dynam : " << ScanImageAndReduceDyn (image, imageDyn, n, hist) << endl;
-        cerr << "Erreur BruteForce : " << (unsigned) ScanImageAndReduce3BruteForce(image, bruteForceBest, &histSize, histRange) << endl;
+        // cerr << "Erreur BruteForce : " << ScanImageAndReduceBruteForce(image, bruteForceBest, hist) << endl;
 
         int hist_w = 512;
         int hist_h = 400;
@@ -310,10 +254,10 @@ int main(int argc, const char** argv)
 
         Mat histImage(hist_h, hist_w, CV_8UC3, Scalar(0, 0, 0));
 
-        /// Normalize the result to [ 0, histImage.rows ]
+        // Normalize the result to [ 0, histImage.rows ]
         normalize(hist, hist, 0, histImage.rows, NORM_MINMAX);
 
-        /// Draw for each channel
+        // Draw for each channel
         for( int i = 1; i < histSize; i++ )
         {
           line( histImage, Point( bin_w*(i-1), hist_h - cvRound(hist.at<float>(i-1)) ) ,
@@ -322,24 +266,11 @@ int main(int argc, const char** argv)
         }
 
         imshow("calcHist", histImage);
-
     }
 
     imshow("Origin", image);              // Show our image inside it.
     imshow("Round", imageRound);
     imshow("Dynamic", imageDyn);
-    imshow("3BruteForce", bruteForceBest);
-
-    unsigned long long int arr = 4285205666;
-    unsigned long long int err = 40;
-
-    cout << "arr" << arr << " err" << err << endl;
-
-    long a = 590;
-    arr += a;
-    err += a;
-
-    cout << "arr" << arr << " err" << err << endl;
 
     waitKey(0);                            // Wait for a keystroke in the window
     return EXIT_SUCCESS;
