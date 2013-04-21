@@ -58,17 +58,17 @@ unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'e
             return e;
 }
 
-unsigned ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
+unsigned long long ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
 {
     Mat hist;
     calcHist(&src, 1, 0, Mat(), hist, 1, histSize, ranges);
 
     vector<unsigned> gbest;
-    unsigned error_min = numeric_limits<unsigned>::max();
+    unsigned error_min = numeric_limits<unsigned long long>::max();
     unsigned m1,m2,m3;
 
     for (m1 = 0; m1 < 256; ++m1) {
-        cout << m1 << endl;
+        cout << (m1*100)/256 << "%" << endl;
         for (m2 = 0; m2 < 256; ++m2) {
             for (m3 = 0; m3 < 256; ++m3) {
                 vector<unsigned> g;
@@ -89,7 +89,7 @@ unsigned ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * his
             }
         }
     }
-
+    cout << "100%" << endl;
 
     src.copyTo(dst);
 
@@ -97,9 +97,9 @@ unsigned ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * his
         for( int j = 0; j < dst.cols; ++j )
             dst.at<uchar>(i,j) = gbest.at(dst.at<uchar>(i,j));
 
-    for (int i = 0; i < gbest.size(); ++i) {
+    /*for (int i = 0; i < gbest.size(); ++i) {
         cout << "g[" << i << "] = " << gbest[i] << "; ";
-    }
+    }*/
 
     cout << endl;
 
@@ -289,7 +289,7 @@ int main(int argc, const char** argv)
 
         cerr << "Erreur Round : " << ScanImageAndReduceRound (image, imageRound, n) << endl;
         cerr << "Erreur Dynam : " << ScanImageAndReduceDyn (image, imageDyn, n, hist) << endl;
-        cerr << "Erreur BruteForce : " << ScanImageAndReduce3BruteForce(image, bruteForceBest, &histSize, histRange) << endl;
+        cerr << "Erreur BruteForce : " << (unsigned) ScanImageAndReduce3BruteForce(image, bruteForceBest, &histSize, histRange) << endl;
 
         int hist_w = 512;
         int hist_h = 400;
