@@ -8,21 +8,25 @@ using namespace std;
 
 #define COLOR false
 
-unsigned long long Error(const Mat & hist, const vector<unsigned> & g)
+unsigned Error(const Mat & hist, const vector<unsigned> & g)
 {
-    unsigned long long e = 0;
+    unsigned e = 0;
     for(unsigned i = 0; i < g.size(); i++)
-        e += cvRound(hist.at<float>(i)) * labs(g[i] - i);
+    {
+        int tmp = g[i] - i;
+        e += cvRound(hist.at<float>(i)) * labs(tmp);
+    }
     return e;
 }
 
-unsigned long long Error2(const Mat & image, const vector<unsigned> & g)
+unsigned Error2(const Mat & image, const vector<unsigned> & g)
 {
-    unsigned long long e = 0;
+    unsigned e = 0;
     MatConstIterator_<uchar> it, end;
     for (it = image.begin<uchar>(), end = image.end<uchar>(); it != end; ++it)
     {
-        e += labs(g[*it] - *it);
+        int tmp = g[*it] - (unsigned)*it;
+        e += labs(tmp);
     }
     return e;
 }
@@ -47,15 +51,18 @@ unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'e
         g.push_back(unsigned( unsigned(i/(256.0/n)) * (256.0/n) ));
 
     src.copyTo(dst);
-    cerr << Error2(src, g) << endl;
-            unsigned e = 0;
-            for( int i = 0; i < dst.rows; ++i)
-                for( int j = 0; j < dst.cols; ++j )
-                {
-                    e += labs(g[dst.at<uchar>(i,j)] - dst.at<uchar>(i,j));
-                    dst.at<uchar>(i,j) = g[dst.at<uchar>(i,j)];
-                }
-            return e;
+
+    cout << Error2(src, g) << endl;
+
+    unsigned e = 0;
+    for( int i = 0; i < dst.rows; ++i)
+        for( int j = 0; j < dst.cols; ++j )
+        {
+            int tmp = g[dst.at<uchar>(i,j)] - dst.at<uchar>(i,j);
+            e += labs(tmp);
+            dst.at<uchar>(i,j) = g[dst.at<uchar>(i,j)];
+        }
+    return e;
 }
 
 void ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
@@ -115,11 +122,11 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
             vector<unsigned> ggauche = G[i-1][j];
             ggauche.push_back(ggauche.at(i-1));
 
-            unsigned egauche = Error(hist, ggauche);
+            unsigned egauche = Error(hist,ggauche);
 
             vector<unsigned> ghaut = G[i-1][j-1];
             unsigned ehaut;
-            if((unsigned)(ghaut.at(i-1)) > i-1)
+            if(ghaut.at(i-1) > i-1)
             {
                 ehaut = egauche + 1;
             }
@@ -152,9 +159,15 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
         for( int i = 0; i < dst.rows; ++i)
             for( int j = 0; j < dst.cols; ++j )
             {
-                e += labs(G[255][n-1][dst.at<uchar>(i,j)] - dst.at<uchar>(i,j));
+                int tmp = G[255][n-1][dst.at<uchar>(i,j)] - dst.at<uchar>(i,j);
+                e += labs(tmp);
                 dst.at<uchar>(i,j) = G[255][n-1][dst.at<uchar>(i,j)];
             }
+
+        cerr << G[255][n-1][0];
+        for(unsigned i = 1; i < G[255][n-1].size(); i++)
+            cerr << "," << G[255][n-1][i];
+        cerr << endl;
         return e;
 }
 
@@ -278,6 +291,17 @@ int main(int argc, const char** argv)
     imshow("Origin", image);              // Show our image inside it.
     imshow("Round", imageRound);
     imshow("Dynamic", imageDyn);
+
+    unsigned long long int arr = 4285205666;
+    unsigned long long int err = 40;
+
+    cout << "arr" << arr << " err" << err << endl;
+
+    long a = 590;
+    arr += a;
+    err += a;
+
+    cout << "arr" << arr << " err" << err << endl;
 
     waitKey(0);                            // Wait for a keystroke in the window
     return EXIT_SUCCESS;
