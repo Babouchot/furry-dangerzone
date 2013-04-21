@@ -8,17 +8,17 @@ using namespace std;
 
 #define COLOR false
 
-unsigned Error(const Mat & hist, const vector<unsigned> & g)
+unsigned long long Error(const Mat & hist, const vector<unsigned> & g)
 {
-    unsigned e = 0;
+    unsigned long long e = 0;
     for(unsigned i = 0; i < g.size(); i++)
         e += cvRound(hist.at<float>(i)) * labs(g[i] - i);
     return e;
 }
 
-unsigned Error2(const Mat & image, const vector<unsigned> & g)
+unsigned long long Error2(const Mat & image, const vector<unsigned> & g)
 {
-    unsigned e = 0;
+    unsigned long long e = 0;
     MatConstIterator_<uchar> it, end;
     for (it = image.begin<uchar>(), end = image.end<uchar>(); it != end; ++it)
     {
@@ -29,6 +29,7 @@ unsigned Error2(const Mat & image, const vector<unsigned> & g)
 
 unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'erreur
 {
+    /*
     // accept only char type matrices
     src.copyTo(dst);
 
@@ -36,13 +37,25 @@ unsigned ScanImageAndReduceRound(const Mat& src, Mat& dst, int n) // renvoie l'e
     for( int i = 0; i < dst.rows; ++i)
         for( int j = 0; j < dst.cols; ++j )
         {
-            unsigned HO = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
-            uchar he = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
-            cerr << endl;
-            e += labs(int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) ) - dst.at<uchar>(i,j));
-            dst.at<uchar>(i,j) = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
+            int rounded = int( int(dst.at<uchar>(i,j)/(256.0/n)) * (256.0/n) );
+            e += labs(rounded - dst.at<uchar>(i,j));
+            dst.at<uchar>(i,j) = rounded;
         }
-    return e;
+    */
+    vector<unsigned> g;
+    for(unsigned i = 0; i < 256; i++)
+        g.push_back(unsigned( unsigned(i/(256.0/n)) * (256.0/n) ));
+
+    src.copyTo(dst);
+    cerr << Error2(src, g) << endl;
+            unsigned e = 0;
+            for( int i = 0; i < dst.rows; ++i)
+                for( int j = 0; j < dst.cols; ++j )
+                {
+                    e += labs(g[dst.at<uchar>(i,j)] - dst.at<uchar>(i,j));
+                    dst.at<uchar>(i,j) = g[dst.at<uchar>(i,j)];
+                }
+            return e;
 }
 
 void ScanImageAndReduce3BruteForce(const Mat& src, Mat& dst, const int * histSize, const float ** ranges)
@@ -148,7 +161,7 @@ unsigned ScanImageAndReduceDyn(const Mat& src, Mat& dst, unsigned n, const Mat &
 int main(int argc, const char** argv)
 {
     Mat image, imageRound, imageDyn;
-    int n = 8;
+    int n = 3;
     int histSize = 256;
     float range[] = { 0, 256 } ;
     const float* histRange[] = { range };
@@ -237,16 +250,6 @@ int main(int argc, const char** argv)
     {
         Mat hist;
         calcHist(&image, 1, 0, Mat(), hist, 1, &histSize, histRange);
-
-        unsigned nb200 = 0;
-        MatIterator_<uchar> it, end;
-        for (it = image.begin<uchar>(), end = image.end<uchar>(); it != end; ++it)
-        {
-            if(*it == 200)
-                nb200++;
-        }
-        cerr << nb200 << " / " << cvRound(hist.at<float>(200)) << endl;
-
 
         cerr << "Erreur Round : " << ScanImageAndReduceRound (image, imageRound, n) << endl;
         cerr << "Erreur Dynam : " << ScanImageAndReduceDyn (image, imageDyn, n, hist) << endl;
